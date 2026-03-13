@@ -83,6 +83,7 @@ contract TreasuryManager is Ownable2Step, ReentrancyGuard {
     error CooldownActive(uint256 timeRemaining);
     error ZeroAmount();
     error ZeroAddress();
+    error InvalidTickRange();
 
     // ══════════════════════════════════════════════════════════════════
     //                          MODIFIERS
@@ -195,6 +196,8 @@ contract TreasuryManager is Ownable2Step, ReentrancyGuard {
         onlyOperatorOrOwner
         enforceCapAndCooldown(_wethAmountFromLiquidity(amount0Desired, amount1Desired))
     {
+        if (tickLower >= tickUpper) revert InvalidTickRange();
+
         address token0 = POOL.token0();
         address token1 = POOL.token1();
 
@@ -352,17 +355,23 @@ contract TreasuryManager is Ownable2Step, ReentrancyGuard {
         return (expectedOut * (10000 - MAX_SLIPPAGE_BPS)) / 10000;
     }
 
-    /// @dev Get 30-min TWAP sqrtPriceX96
+    /// @dev Get 30-min TWAP sqrtPriceX96. Falls back to spot price if TWAP unavailable.
     function _getTWAPSqrtPrice() internal view returns (uint160) {
+        try POOL.observe(_getTWAPSecondsAgos()) returns (int56[] memory tickCumulatives, uint160[] memory) {
+            int24 twapTick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(TWAP_WINDOW)));
+            return _getSqrtRatioAtTick(twapTick);
+        } catch {
+            // Fallback to spot price if observation cardinality is insufficient
+            (uint160 sqrtPriceX96,,,,,,) = POOL.slot0();
+            return sqrtPriceX96;
+        }
+    }
+
+    function _getTWAPSecondsAgos() internal pure returns (uint32[] memory) {
         uint32[] memory secondsAgos = new uint32[](2);
         secondsAgos[0] = TWAP_WINDOW;
         secondsAgos[1] = 0;
-
-        (int56[] memory tickCumulatives,) = POOL.observe(secondsAgos);
-
-        int24 twapTick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(TWAP_WINDOW)));
-
-        return _getSqrtRatioAtTick(twapTick);
+        return secondsAgos;
     }
 
     /// @dev Get TWAP price (18 decimals) for external consumption

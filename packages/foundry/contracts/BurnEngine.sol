@@ -187,10 +187,13 @@ contract BurnEngine is ReentrancyGuard {
     //                      INTERNAL FUNCTIONS
     // ══════════════════════════════════════════════════════════════════
 
+    error InvalidPrice();
+
     /// @dev Calculate minimum output amount from on-chain price with slippage
     /// Uses FullMath.mulDiv to avoid overflow with sqrtPriceX96^2
     function _calculateMinAmountOut(uint256 amountIn) internal view returns (uint256) {
         (uint160 sqrtPriceX96,,,,,,) = POOL.slot0();
+        if (sqrtPriceX96 == 0) revert InvalidPrice();
         address token0 = POOL.token0();
         uint256 sqrtPrice = uint256(sqrtPriceX96);
 
