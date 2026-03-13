@@ -1,9 +1,10 @@
 "use client";
 
 import type { NextPage } from "next";
-import { formatEther, formatUnits } from "viem";
+import { formatEther } from "viem";
 import { useReadContract } from "wagmi";
 import { base } from "viem/chains";
+import { Address } from "@scaffold-ui/components";
 
 // Contract addresses (will be updated after deployment)
 const BURN_ENGINE_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
@@ -259,49 +260,21 @@ const Home: NextPage = () => {
         <div className="bg-base-100 rounded-2xl p-6 shadow-lg space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-base-content/60">₸USD Token</span>
-            <a
-              href={`https://basescan.org/address/${TUSD_ADDRESS}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-sm link"
-            >
-              {TUSD_ADDRESS.slice(0, 6)}...{TUSD_ADDRESS.slice(-4)}
-            </a>
+            <Address address={TUSD_ADDRESS} chain={base} />
           </div>
           <div className="flex justify-between items-center">
             <span className="text-base-content/60">Uniswap V3 Pool</span>
-            <a
-              href={`https://basescan.org/address/${POOL_ADDRESS}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-sm link"
-            >
-              {POOL_ADDRESS.slice(0, 6)}...{POOL_ADDRESS.slice(-4)}
-            </a>
+            <Address address={POOL_ADDRESS} chain={base} />
           </div>
           {contractsDeployed && (
             <>
               <div className="flex justify-between items-center">
                 <span className="text-base-content/60">BurnEngine</span>
-                <a
-                  href={`https://basescan.org/address/${BURN_ENGINE_ADDRESS}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-sm link"
-                >
-                  {BURN_ENGINE_ADDRESS.slice(0, 6)}...{BURN_ENGINE_ADDRESS.slice(-4)}
-                </a>
+                <Address address={BURN_ENGINE_ADDRESS} chain={base} />
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-base-content/60">TreasuryManager</span>
-                <a
-                  href={`https://basescan.org/address/${TREASURY_MANAGER_ADDRESS}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-sm link"
-                >
-                  {TREASURY_MANAGER_ADDRESS.slice(0, 6)}...{TREASURY_MANAGER_ADDRESS.slice(-4)}
-                </a>
+                <Address address={TREASURY_MANAGER_ADDRESS} chain={base} />
               </div>
             </>
           )}
