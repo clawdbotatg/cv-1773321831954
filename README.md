@@ -1,83 +1,105 @@
-# 🏗 Scaffold-ETH 2
+# 🏦 ₸USD Federal Meme Reserve
 
-<h4 align="center">
-  <a href="https://docs.scaffoldeth.io">Documentation</a> |
-  <a href="https://scaffoldeth.io">Website</a>
-</h4>
+Autonomous monetary policy for the memecoin of record. A permissionless burn engine + custodied treasury management system for ₸USD (TurboUSD) on Base.
 
-🧪 An open-source, up-to-date toolkit for building decentralized applications (dapps) on the Ethereum blockchain. It's designed to make it easier for developers to create and deploy smart contracts and build user interfaces that interact with those contracts.
+## 🏗 Architecture
 
-> [!NOTE]
-> 🤖 Scaffold-ETH 2 is AI-ready! It has everything agents need to build on Ethereum. Check `.agents/`, `.claude/`, `.opencode` or `.cursor/` for more info.
+### Smart Contracts (Base Mainnet)
 
-⚙️ Built using NextJS, RainbowKit, Foundry, Wagmi, Viem, and Typescript.
+**BurnEngine** — `0x996A533AF55F6E7230f44D9a36B21E659509122c`
+- Permissionless hyperstructure. No owner, no admin, no pause, no upgrade.
+- Claims Clanker LP fees → swaps WETH→₸USD → burns all ₸USD to `0xdead`
+- Anyone can call `executeFullCycle()`
+- Uses on-chain sqrtPriceX96 for slippage protection (3% max)
 
-- ✅ **Contract Hot Reload**: Your frontend auto-adapts to your smart contract as you edit it.
-- 🪝 **[Custom hooks](https://docs.scaffoldeth.io/hooks/)**: Collection of React hooks wrapper around [wagmi](https://wagmi.sh/) to simplify interactions with smart contracts with typescript autocompletion.
-- 🧱 [**Components**](https://docs.scaffoldeth.io/components/): Collection of common web3 components to quickly build your frontend.
-- 🔥 **Burner Wallet & Local Faucet**: Quickly test your application with a burner wallet and local faucet.
-- 🔐 **Integration with Wallet Providers**: Connect to different wallet providers and interact with the Ethereum network.
+**TreasuryManager** — `0x93461176eb7740665DE023602A775aF696f06910`
+- Owner + authorized operator pattern with hard-coded caps
+- `buyback()` — Market buy ₸USD with WETH (0.5 ETH/action, 2 ETH/day caps)
+- `burnHoldings()` — Burn all ₸USD held by treasury
+- `addLiquidity()` — Concentrated liquidity provision
+- `removeLiquidity()` — Owner only
+- 30-min TWAP oracle for price-based actions
+- 10-min operator cooldown
 
-![Debug Contracts tab](https://github.com/scaffold-eth/scaffold-eth-2/assets/55535804/b237af0c-5027-4849-a5c1-2e31495cccb1)
+### Telegram Bot
+- Node.js + grammy + viem
+- Claude Sonnet API for satirical Fed-speak AI responses
+- Dual hot wallets: burn caller + treasury operator
+- FRED API macro data integration (CPI, Fed Funds Rate, M2, US Debt)
+- FOMC calendar awareness
 
-## Requirements
+### SE2 Dashboard
+- Real-time ₸USD price from sqrtPriceX96
+- Total burned, burn engine cycles, treasury balances
+- Read-only — uses local burner wallet for wallet connection
 
-Before you begin, you need to install the following tools:
+## 🔑 Key Addresses
 
-- [Node (>= v20.18.3)](https://nodejs.org/en/download/)
-- Yarn ([v1](https://classic.yarnpkg.com/en/docs/install/) or [v2+](https://yarnpkg.com/getting-started/install))
-- [Git](https://git-scm.com/downloads)
+| Contract | Address |
+|----------|---------|
+| ₸USD Token | `0x3d5e487B21E0569048c4D1A60E98C36e1B09DB07` |
+| WETH/₸USD Pool (1%) | `0xd013725b904e76394A3aB0334Da306C505D778F8` |
+| BurnEngine | `0x996A533AF55F6E7230f44D9a36B21E659509122c` |
+| TreasuryManager | `0x93461176eb7740665DE023602A775aF696f06910` |
+| ClankerFeeLocker | `0xF3622742b1E446D92e45E22923Ef11C2fcD55D68` |
 
-## Quickstart
+### Hot Wallets (need funding)
+| Wallet | Address | Purpose |
+|--------|---------|---------|
+| Burn Caller | `0x52b26dB29BC46160270941e301CF6f0ea67f84C7` | Signs BurnEngine.executeFullCycle |
+| Treasury Operator | `0x4e89764184AF782889D7F6711F5548e27203652a` | Signs TreasuryManager buyback/burn |
 
-To get started with Scaffold-ETH 2, follow the steps below:
+## 🚀 Setup
 
-1. Install dependencies if it was skipped in CLI:
+### Prerequisites
+- Node.js 18+
+- Foundry (`curl -L https://foundry.paradigm.xyz | bash`)
 
-```
-cd my-dapp-example
+### Install
+```bash
 yarn install
 ```
 
-2. Run a local network in the first terminal:
-
-```
-yarn chain
-```
-
-This command starts a local Ethereum network using Foundry. The network runs on your local machine and can be used for testing and development. You can customize the network configuration in `packages/foundry/foundry.toml`.
-
-3. On a second terminal, deploy the test contract:
-
-```
-yarn deploy
+### Run Tests (Base Fork)
+```bash
+export PATH="$HOME/.foundry/bin:$PATH"
+cd packages/foundry
+forge test --fork-url https://base-mainnet.g.alchemy.com/v2/YOUR_KEY -vvv
 ```
 
-This command deploys a test smart contract to the local network. The contract is located in `packages/foundry/contracts` and can be modified to suit your needs. The `yarn deploy` command uses the deploy script located in `packages/foundry/script` to deploy the contract to the network. You can also customize the deploy script.
-
-4. On a third terminal, start your NextJS app:
-
-```
+### Run Dashboard
+```bash
 yarn start
 ```
 
-Visit your app on: `http://localhost:3000`. You can interact with your smart contract using the `Debug Contracts` page. You can tweak the app config in `packages/nextjs/scaffold.config.ts`.
+### Bot Setup
+```bash
+cp .env.example .env
+# Fill in API keys and wallet keys
+cd packages/bot
+npm install
+npm start
+```
 
-Run smart contract test with `yarn foundry:test`
+## 📊 IPFS Dashboard
 
-- Edit your smart contracts in `packages/foundry/contracts`
-- Edit your frontend homepage at `packages/nextjs/app/page.tsx`. For guidance on [routing](https://nextjs.org/docs/app/building-your-application/routing/defining-routes) and configuring [pages/layouts](https://nextjs.org/docs/app/building-your-application/routing/pages-and-layouts) checkout the Next.js documentation.
-- Edit your deployment scripts in `packages/foundry/script`
+CID: `bafybeictsychbik6g6dst22oombjq7fjfwrxkb5lpbqt7q33eowqjq22gy`
 
+## 🔥 Post-Deployment Steps
 
-## Documentation
+1. **Set BurnEngine as feeOwner** — Transfer Clanker LP fee ownership to BurnEngine contract
+2. **Set treasury operator** — Call `TreasuryManager.setOperator(0x4e89764184AF782889D7F6711F5548e27203652a)`
+3. **Fund hot wallets** — Send ~0.005 ETH to burn caller, ~0.01 ETH to treasury operator
+4. **Configure bot** — Set Telegram bot token, Anthropic API key, FRED API key
 
-Visit our [docs](https://docs.scaffoldeth.io) to learn how to start building with Scaffold-ETH 2.
+## 🏗 Built With
 
-To know more about its features, check out our [website](https://scaffoldeth.io).
+- [Scaffold-ETH 2](https://github.com/scaffold-eth/scaffold-eth-2)
+- [Foundry](https://book.getfoundry.sh/)
+- [Uniswap V3](https://docs.uniswap.org/)
+- [Clanker](https://clanker.gitbook.io/)
+- [grammy](https://grammy.dev/)
 
-## Contributing to Scaffold-ETH 2
+## 📜 License
 
-We welcome contributions to Scaffold-ETH 2!
-
-Please see [CONTRIBUTING.MD](https://github.com/scaffold-eth/scaffold-eth-2/blob/main/CONTRIBUTING.md) for more information and guidelines for contributing to Scaffold-ETH 2.
+MIT
