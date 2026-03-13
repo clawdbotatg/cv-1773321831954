@@ -2,18 +2,18 @@
 
 import type { NextPage } from "next";
 import { formatEther } from "viem";
-import { useReadContract } from "wagmi";
 import { base } from "viem/chains";
-import { Address } from "@scaffold-ui/components";
+import { useReadContract } from "wagmi";
 
-// Contract addresses (will be updated after deployment)
+// ── Contract Addresses ─────────────────────────────────────────────────────
 const BURN_ENGINE_ADDRESS = "0x996A533AF55F6E7230f44D9a36B21E659509122c" as `0x${string}`;
 const TREASURY_MANAGER_ADDRESS = "0x93461176eb7740665DE023602A775aF696f06910" as `0x${string}`;
 const TUSD_ADDRESS = "0x3d5e487B21E0569048c4D1A60E98C36e1B09DB07" as `0x${string}`;
 const DEAD_ADDRESS = "0x000000000000000000000000000000000000dEaD" as `0x${string}`;
 const POOL_ADDRESS = "0xd013725b904e76394A3aB0334Da306C505D778F8" as `0x${string}`;
+// Pool: token0 = TUSD, token1 = WETH
 
-// Minimal ABIs for reads
+// ── ABIs ──────────────────────────────────────────────────────────────────
 const burnEngineAbi = [
   {
     name: "getStatus",
@@ -27,13 +27,6 @@ const burnEngineAbi = [
       { name: "_wethBalance", type: "uint256" },
       { name: "_tusdBalance", type: "uint256" },
     ],
-  },
-  {
-    name: "getCurrentPrice",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "price", type: "uint256" }],
   },
 ] as const;
 
@@ -90,6 +83,52 @@ const poolAbi = [
   },
 ] as const;
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Compute TUSD per WETH from pool sqrtPriceX96.
+ * Pool: token0 = TUSD, token1 = WETH
+ * sqrtPriceX96 = sqrt(WETH / TUSD) * 2^96
+ * price(WETH/TUSD) = (sqrtPriceX96 / 2^96)^2
+ * price(TUSD/WETH) = 1 / price(WETH/TUSD)   ← always invert
+ */
+function tusdPerWeth(sqrtPriceX96: bigint): string {
+  if (!sqrtPriceX96 || sqrtPriceX96 === 0n) return "—";
+  // Use BigInt math to preserve precision before converting to float
+  // price(WETH/TUSD) = sqrtPriceX96^2 / 2^192
+  // price(TUSD/WETH) = 2^192 / sqrtPriceX96^2
+  // Scale numerator to avoid integer truncation: multiply by 1e18
+  const Q192 = 2n ** 192n;
+  const scale = 10n ** 18n;
+  const priceScaled = (Q192 * scale) / (sqrtPriceX96 * sqrtPriceX96);
+  // priceScaled is now TUSD/WETH * 1e18 (in bigint)
+  const priceFloat = Number(priceScaled) / 1e18;
+  if (priceFloat > 1_000_000) {
+    return `${(priceFloat / 1_000_000).toFixed(2)}M`;
+  }
+  if (priceFloat > 1_000) {
+    return `${priceFloat.toFixed(0)}`;
+  }
+  return priceFloat.toFixed(2);
+}
+
+function truncateAddr(addr: string): string {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function BasescanLink({ address, label }: { address: string; label?: string }) {
+  return (
+    <a
+      href={`https://basescan.org/address/${address}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-mono text-sm text-primary hover:underline"
+    >
+      {label ?? truncateAddr(address)}
+    </a>
+  );
+}
+
 function StatCard({ title, value, subtitle }: { title: string; value: string; subtitle?: string }) {
   return (
     <div className="bg-base-100 rounded-2xl p-6 shadow-lg">
@@ -100,29 +139,9 @@ function StatCard({ title, value, subtitle }: { title: string; value: string; su
   );
 }
 
-function computePriceFromSqrtPriceX96(sqrtPriceX96: bigint): string {
-  // sqrtPriceX96 = sqrt(price) * 2^96
-  // price = (sqrtPriceX96 / 2^96)^2
-  // For WETH/TUSD pool: price is TUSD per WETH (token1/token0 if WETH is token0)
-  const Q96 = BigInt(2) ** BigInt(96);
-  const sqrtPrice = Number(sqrtPriceX96) / Number(Q96);
-  const price = sqrtPrice * sqrtPrice;
-
-  // Since TUSD has 18 decimals and WETH has 18 decimals, no adjustment needed
-  // But we want price of TUSD in USD terms (≈ WETH_price * inverse)
-  // For display, show how many TUSD per WETH
-  if (price > 0 && price < 1e-10) {
-    // If price is very small, TUSD is token0 and WETH is token1
-    // So price = WETH/TUSD, and we want TUSD/WETH = 1/price
-    return (1 / price).toFixed(2);
-  }
-  return price.toFixed(2);
-}
-
+// ── Page ──────────────────────────────────────────────────────────────────
 const Home: NextPage = () => {
-  const contractsDeployed = BURN_ENGINE_ADDRESS !== "0x0000000000000000000000000000000000000000";
-
-  // Read TUSD burned (balance of DEAD address)
+  // Read TUSD balance of DEAD address
   const { data: tusdBurned } = useReadContract({
     address: TUSD_ADDRESS,
     abi: erc20Abi,
@@ -147,49 +166,47 @@ const Home: NextPage = () => {
     chainId: base.id,
   });
 
-  // Read BurnEngine status (only if deployed)
+  // Read BurnEngine status
   const { data: burnStatus } = useReadContract({
     address: BURN_ENGINE_ADDRESS,
     abi: burnEngineAbi,
     functionName: "getStatus",
     chainId: base.id,
-    query: { enabled: contractsDeployed },
   });
 
-  // Read TreasuryManager status (only if deployed)
+  // Read TreasuryManager status
   const { data: treasuryStatus } = useReadContract({
     address: TREASURY_MANAGER_ADDRESS,
     abi: treasuryManagerAbi,
     functionName: "getStatus",
     chainId: base.id,
-    query: { enabled: contractsDeployed },
   });
 
   const sqrtPriceX96 = slot0?.[0];
-  const tusdPrice = sqrtPriceX96 ? computePriceFromSqrtPriceX96(sqrtPriceX96) : "—";
-  const burnedFormatted = tusdBurned ? Number(formatEther(tusdBurned)).toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—";
-  const supplyFormatted = tusdSupply ? Number(formatEther(tusdSupply)).toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—";
-  const burnPercentage = tusdBurned && tusdSupply && tusdSupply > 0n
-    ? ((Number(tusdBurned) / Number(tusdSupply)) * 100).toFixed(2)
+  const tusdPrice = sqrtPriceX96 ? tusdPerWeth(sqrtPriceX96) : "—";
+
+  const burnedFormatted = tusdBurned
+    ? Number(formatEther(tusdBurned)).toLocaleString(undefined, { maximumFractionDigits: 0 })
     : "—";
+  const supplyFormatted = tusdSupply
+    ? Number(formatEther(tusdSupply)).toLocaleString(undefined, { maximumFractionDigits: 0 })
+    : "—";
+  const burnPercentage =
+    tusdBurned && tusdSupply && tusdSupply > 0n ? ((Number(tusdBurned) / Number(tusdSupply)) * 100).toFixed(2) : "—";
 
   return (
     <div className="flex flex-col items-center grow pt-6 pb-12">
       {/* Header */}
       <div className="text-center px-4 mb-8">
-        <h1 className="text-4xl font-bold mb-2">
-          🏦 ₸USD Federal Meme Reserve
-        </h1>
-        <p className="text-lg text-base-content/60">
-          Autonomous monetary policy for the memecoin of record
-        </p>
+        <h1 className="text-4xl font-bold mb-2">🏦 ₸USD Federal Meme Reserve</h1>
+        <p className="text-lg text-base-content/60">Autonomous monetary policy for the memecoin of record</p>
       </div>
 
       {/* Price Banner */}
       <div className="bg-gradient-to-r from-primary/20 to-secondary/20 rounded-2xl p-6 mb-8 mx-4 max-w-2xl w-full text-center">
-        <p className="text-sm text-base-content/60 uppercase tracking-wider">₸USD / WETH Price</p>
+        <p className="text-sm text-base-content/60 uppercase tracking-wider">₸USD per WETH</p>
         <p className="text-5xl font-bold text-primary mt-2">{tusdPrice}</p>
-        <p className="text-xs text-base-content/40 mt-2">₸USD per WETH • Uniswap V3 1% Pool • sqrtPriceX96</p>
+        <p className="text-xs text-base-content/40 mt-2">Uniswap V3 1% Pool · sqrtPriceX96 · token0=TUSD token1=WETH</p>
       </div>
 
       {/* Main Stats Grid */}
@@ -199,91 +216,93 @@ const Home: NextPage = () => {
           value={`${burnedFormatted} ₸USD`}
           subtitle={`${burnPercentage}% of total supply`}
         />
-        <StatCard
-          title="📊 Total Supply"
-          value={`${supplyFormatted} ₸USD`}
-        />
+        <StatCard title="📊 Total Supply" value={`${supplyFormatted} ₸USD`} />
         <StatCard
           title="📈 Burn Engine Cycles"
           value={burnStatus ? burnStatus[2].toString() : "—"}
-          subtitle={burnStatus && burnStatus[1] > 0n
-            ? `Last: ${new Date(Number(burnStatus[1]) * 1000).toLocaleString()}`
-            : "Not yet activated"}
+          subtitle={
+            burnStatus && burnStatus[1] > 0n
+              ? `Last: ${new Date(Number(burnStatus[1]) * 1000).toLocaleString()}`
+              : "Not yet activated"
+          }
         />
       </div>
 
-      {/* Treasury Section */}
-      {contractsDeployed && (
-        <div className="max-w-4xl w-full px-4 mb-8">
-          <h2 className="text-2xl font-bold mb-4">🏛️ Treasury Status</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <StatCard
-              title="WETH Balance"
-              value={treasuryStatus ? `${Number(formatEther(treasuryStatus[0])).toFixed(4)} WETH` : "—"}
-            />
-            <StatCard
-              title="₸USD Balance"
-              value={treasuryStatus ? `${Number(formatEther(treasuryStatus[1])).toLocaleString()} ₸USD` : "—"}
-            />
-            <StatCard
-              title="Daily Spend Remaining"
-              value={treasuryStatus ? `${Number(formatEther(treasuryStatus[3])).toFixed(4)} WETH` : "—"}
-            />
-            <StatCard
-              title="Operator Cooldown"
-              value={treasuryStatus && treasuryStatus[4] > 0n ? `${treasuryStatus[4].toString()}s` : "Ready"}
-            />
-          </div>
+      {/* Treasury */}
+      <div className="max-w-4xl w-full px-4 mb-8">
+        <h2 className="text-2xl font-bold mb-4">🏛️ Treasury</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <StatCard
+            title="WETH Balance"
+            value={treasuryStatus ? `${Number(formatEther(treasuryStatus[0])).toFixed(4)} WETH` : "—"}
+          />
+          <StatCard
+            title="₸USD Balance"
+            value={treasuryStatus ? `${Number(formatEther(treasuryStatus[1])).toLocaleString()} ₸USD` : "—"}
+          />
+          <StatCard
+            title="Daily Spend Remaining"
+            value={treasuryStatus ? `${Number(formatEther(treasuryStatus[3])).toFixed(4)} WETH` : "—"}
+          />
+          <StatCard
+            title="Operator Cooldown"
+            value={treasuryStatus && treasuryStatus[4] > 0n ? `${treasuryStatus[4].toString()}s` : "Ready"}
+          />
         </div>
-      )}
+      </div>
 
-      {/* Burn Engine Section */}
-      {contractsDeployed && (
-        <div className="max-w-4xl w-full px-4 mb-8">
-          <h2 className="text-2xl font-bold mb-4">🔥 Burn Engine</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <StatCard
-              title="WETH Pending Swap"
-              value={burnStatus ? `${Number(formatEther(burnStatus[3])).toFixed(6)} WETH` : "—"}
-            />
-            <StatCard
-              title="₸USD Pending Burn"
-              value={burnStatus ? `${Number(formatEther(burnStatus[4])).toFixed(2)} ₸USD` : "—"}
-            />
-          </div>
+      {/* Burn Engine */}
+      <div className="max-w-4xl w-full px-4 mb-8">
+        <h2 className="text-2xl font-bold mb-4">🔥 Burn Engine</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <StatCard
+            title="WETH Pending Swap"
+            value={burnStatus ? `${Number(formatEther(burnStatus[3])).toFixed(6)} WETH` : "—"}
+          />
+          <StatCard
+            title="₸USD Pending Burn"
+            value={burnStatus ? `${Number(formatEther(burnStatus[4])).toFixed(2)} ₸USD` : "—"}
+          />
+          <StatCard
+            title="Total Burned via Engine"
+            value={
+              burnStatus
+                ? `${Number(formatEther(burnStatus[0])).toLocaleString(undefined, { maximumFractionDigits: 0 })} ₸USD`
+                : "—"
+            }
+          />
+          <StatCard
+            title="Last Cycle"
+            value={
+              burnStatus && burnStatus[1] > 0n ? new Date(Number(burnStatus[1]) * 1000).toLocaleDateString() : "Never"
+            }
+          />
         </div>
-      )}
+      </div>
 
-      {/* Contract Addresses */}
+      {/* Contracts */}
       <div className="max-w-4xl w-full px-4">
         <h2 className="text-2xl font-bold mb-4">📋 Contracts</h2>
         <div className="bg-base-100 rounded-2xl p-6 shadow-lg space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-base-content/60">₸USD Token</span>
-            <Address address={TUSD_ADDRESS} chain={base} />
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-base-content/60">Uniswap V3 Pool</span>
-            <Address address={POOL_ADDRESS} chain={base} />
-          </div>
-          {contractsDeployed && (
-            <>
-              <div className="flex justify-between items-center">
-                <span className="text-base-content/60">BurnEngine</span>
-                <Address address={BURN_ENGINE_ADDRESS} chain={base} />
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-base-content/60">TreasuryManager</span>
-                <Address address={TREASURY_MANAGER_ADDRESS} chain={base} />
-              </div>
-            </>
-          )}
+          {(
+            [
+              ["₸USD Token", TUSD_ADDRESS],
+              ["Uniswap V3 Pool", POOL_ADDRESS],
+              ["BurnEngine", BURN_ENGINE_ADDRESS],
+              ["TreasuryManager", TREASURY_MANAGER_ADDRESS],
+            ] as [string, string][]
+          ).map(([label, addr]) => (
+            <div key={addr} className="flex justify-between items-center">
+              <span className="text-base-content/60 text-sm">{label}</span>
+              <BasescanLink address={addr} />
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="mt-12 text-center text-base-content/40 text-sm">
-        <p>TurboUSD Federal Meme Reserve • Built on Base • Powered by Clanker</p>
+      <div className="mt-12 text-center text-base-content/40 text-sm space-y-1">
+        <p>TurboUSD Federal Meme Reserve · Built on Base · Powered by Clanker</p>
         <a
           href="https://github.com/clawdbotatg/cv-1773321831954"
           target="_blank"

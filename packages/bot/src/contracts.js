@@ -106,11 +106,13 @@ export async function getTusdPrice() {
     functionName: "slot0",
   });
   const sqrtPriceX96 = slot0[0];
-  const Q96 = 2n ** 96n;
-  const sqrtPrice = Number(sqrtPriceX96) / Number(Q96);
-  const price = sqrtPrice * sqrtPrice;
-  // Return TUSD per WETH
-  return price < 1e-10 ? 1 / price : price;
+  // Pool: token0=TUSD, token1=WETH
+  // sqrtPriceX96 = sqrt(WETH/TUSD) * 2^96
+  // TUSD/WETH = 2^192 / sqrtPriceX96^2  (always invert)
+  const Q192 = 2n ** 192n;
+  const scale = 10n ** 18n;
+  const priceScaled = (Q192 * scale) / (sqrtPriceX96 * sqrtPriceX96);
+  return Number(priceScaled) / 1e18; // TUSD per WETH
 }
 
 export async function getTusdBurned() {
