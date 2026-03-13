@@ -8,8 +8,8 @@ import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 
 export const metadata = getMetadata({
-  title: 'Scaffold-ETH 2 App',
-  description: 'Built with 🏗 Scaffold-ETH 2'
+  title: '₸USD Federal Meme Reserve',
+  description: 'Autonomous monetary policy for the memecoin of record. Burn engine + treasury management on Base.'
 });
 
 const ScaffoldEthApp = ({ children }: { children: React.ReactNode }) => {

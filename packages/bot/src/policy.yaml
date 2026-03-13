@@ -1,0 +1,36 @@
+# ₸USD Monetary Policy Playbook
+# Rules for automated agent actions
+# All rules respect TreasuryManager onchain caps
+
+rules:
+  - trigger: cpi_above_expectations
+    description: Inflation rising — tighten monetary policy
+    action: burn_cycle + hawkish_statement
+    priority: high
+
+  - trigger: cpi_below_expectations
+    description: Inflation cooling — dovish tone only
+    action: dovish_statement_only
+    priority: medium
+
+  - trigger: fed_rate_cut
+    description: Real Fed easing — mirror with buyback
+    action: treasury_buyback + easing_statement
+    priority: high
+
+  - trigger: fed_rate_hike
+    description: Real Fed tightening — mirror with burns
+    action: burn_cycle + tightening_statement
+    priority: high
+
+  - trigger: tusd_price_drop_20pct_24h
+    description: Emergency stabilization
+    action: emergency_stabilization_buyback
+    priority: critical
+    note: Capped by TreasuryManager MAX_SPEND_PER_DAY
+
+  - trigger: weekly_default
+    description: Regular weekly burn cycle
+    action: burn_cycle
+    priority: low
+    schedule: every_monday_12utc
