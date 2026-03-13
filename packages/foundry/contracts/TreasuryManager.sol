@@ -8,6 +8,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ISwapRouter02} from "./interfaces/ISwapRouter02.sol";
 import {IUniswapV3Pool} from "./interfaces/IUniswapV3Pool.sol";
 import {INonfungiblePositionManager} from "./interfaces/INonfungiblePositionManager.sol";
+import {FullMath} from "./libraries/FullMath.sol";
 
 /// @title TreasuryManager — Custodied Treasury for ₸USD Monetary Policy
 /// @notice Owner + authorized operator pattern with hard-coded caps
@@ -210,8 +211,8 @@ contract TreasuryManager is Ownable2Step, ReentrancyGuard {
                     tickUpper: tickUpper,
                     amount0Desired: amount0Desired,
                     amount1Desired: amount1Desired,
-                    amount0Min: 0,
-                    amount1Min: 0,
+                    amount0Min: (amount0Desired * (10000 - MAX_SLIPPAGE_BPS)) / 10000,
+                    amount1Min: (amount1Desired * (10000 - MAX_SLIPPAGE_BPS)) / 10000,
                     recipient: address(this),
                     deadline: block.timestamp
                 })
@@ -332,24 +333,27 @@ contract TreasuryManager is Ownable2Step, ReentrancyGuard {
     //                      INTERNAL FUNCTIONS
     // ══════════════════════════════════════════════════════════════════
 
+    /// @dev Calculate min output from 30-min TWAP with slippage
     function _calculateMinAmountOut(uint256 amountIn) internal view returns (uint256) {
-        uint256 twapPrice = _getTWAPPrice();
+        uint160 twapSqrtPrice = _getTWAPSqrtPrice();
         address token0 = POOL.token0();
+        uint256 sqrtPrice = uint256(twapSqrtPrice);
 
         uint256 expectedOut;
         if (token0 == address(WETH)) {
-            // WETH is token0, TUSD is token1
-            // twapPrice is in terms of tick → we need to convert
-            expectedOut = (amountIn * twapPrice) / 1e18;
+            // WETH is token0: expectedOut = amountIn * sqrtPrice^2 / 2^192
+            expectedOut = FullMath.mulDiv(amountIn, FullMath.mulDiv(sqrtPrice, sqrtPrice, 1 << 96), 1 << 96);
         } else {
-            expectedOut = (amountIn * 1e18) / twapPrice;
+            // WETH is token1: expectedOut = amountIn * 2^192 / sqrtPrice^2
+            expectedOut = FullMath.mulDiv(amountIn, 1 << 96, sqrtPrice);
+            expectedOut = FullMath.mulDiv(expectedOut, 1 << 96, sqrtPrice);
         }
 
         return (expectedOut * (10000 - MAX_SLIPPAGE_BPS)) / 10000;
     }
 
-    /// @dev Get 30-min TWAP tick, convert to price
-    function _getTWAPPrice() internal view returns (uint256) {
+    /// @dev Get 30-min TWAP sqrtPriceX96
+    function _getTWAPSqrtPrice() internal view returns (uint160) {
         uint32[] memory secondsAgos = new uint32[](2);
         secondsAgos[0] = TWAP_WINDOW;
         secondsAgos[1] = 0;
@@ -358,18 +362,21 @@ contract TreasuryManager is Ownable2Step, ReentrancyGuard {
 
         int24 twapTick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(TWAP_WINDOW)));
 
-        // Convert tick to sqrtPriceX96
-        // price = 1.0001^tick
-        // For simplicity, use the approximation via TickMath equivalent
-        uint160 sqrtPriceX96 = _getSqrtRatioAtTick(twapTick);
+        return _getSqrtRatioAtTick(twapTick);
+    }
 
+    /// @dev Get TWAP price (18 decimals) for external consumption
+    function _getTWAPPrice() internal view returns (uint256) {
+        uint160 sqrtPriceX96 = _getTWAPSqrtPrice();
         address token0 = POOL.token0();
         uint256 sqrtPrice = uint256(sqrtPriceX96);
 
         if (token0 == address(WETH)) {
-            return (sqrtPrice * sqrtPrice * 1e18) >> 192;
+            // Price of TUSD in WETH = 1 / (sqrtPrice^2 / 2^192)
+            uint256 price = FullMath.mulDiv(sqrtPrice, sqrtPrice, 1 << 96);
+            return FullMath.mulDiv(1e18, 1 << 96, price);
         } else {
-            return (1e18 << 192) / (sqrtPrice * sqrtPrice);
+            return FullMath.mulDiv(FullMath.mulDiv(sqrtPrice, sqrtPrice, 1 << 96), 1e18, 1 << 96);
         }
     }
 

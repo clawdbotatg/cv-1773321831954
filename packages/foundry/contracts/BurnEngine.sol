@@ -7,6 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IClankerFeeLocker} from "./interfaces/IClankerFeeLocker.sol";
 import {ISwapRouter02} from "./interfaces/ISwapRouter02.sol";
 import {IUniswapV3Pool} from "./interfaces/IUniswapV3Pool.sol";
+import {FullMath} from "./libraries/FullMath.sol";
 
 /// @title BurnEngine — Permissionless ₸USD Burn Hyperstructure
 /// @notice Claims Clanker LP fees, swaps WETH→₸USD, burns all ₸USD atomically.
@@ -59,6 +60,8 @@ contract BurnEngine is ReentrancyGuard {
     //                        CONSTRUCTOR
     // ══════════════════════════════════════════════════════════════════
 
+    error ZeroAddress();
+
     constructor(
         address _clankerFeeLocker,
         address _uniswapRouter,
@@ -66,6 +69,12 @@ contract BurnEngine is ReentrancyGuard {
         address _weth,
         address _tusd
     ) {
+        if (_clankerFeeLocker == address(0)) revert ZeroAddress();
+        if (_uniswapRouter == address(0)) revert ZeroAddress();
+        if (_pool == address(0)) revert ZeroAddress();
+        if (_weth == address(0)) revert ZeroAddress();
+        if (_tusd == address(0)) revert ZeroAddress();
+
         CLANKER_FEE_LOCKER = IClankerFeeLocker(_clankerFeeLocker);
         UNISWAP_ROUTER = ISwapRouter02(_uniswapRouter);
         POOL = IUniswapV3Pool(_pool);
@@ -179,39 +188,38 @@ contract BurnEngine is ReentrancyGuard {
     // ══════════════════════════════════════════════════════════════════
 
     /// @dev Calculate minimum output amount from on-chain price with slippage
+    /// Uses FullMath.mulDiv to avoid overflow with sqrtPriceX96^2
     function _calculateMinAmountOut(uint256 amountIn) internal view returns (uint256) {
         (uint160 sqrtPriceX96,,,,,,) = POOL.slot0();
-
-        // Determine token order
         address token0 = POOL.token0();
+        uint256 sqrtPrice = uint256(sqrtPriceX96);
 
         uint256 expectedOut;
         if (token0 == address(WETH)) {
-            // WETH is token0: price = token1/token0
-            // sqrtPriceX96 = sqrt(token1/token0) * 2^96
-            // expectedOut = amountIn * (sqrtPriceX96^2 / 2^192)
-            expectedOut = (amountIn * uint256(sqrtPriceX96) * uint256(sqrtPriceX96)) >> 192;
+            // WETH is token0: expectedOut = amountIn * sqrtPrice^2 / 2^192
+            expectedOut = FullMath.mulDiv(amountIn, FullMath.mulDiv(sqrtPrice, sqrtPrice, 1 << 96), 1 << 96);
         } else {
-            // WETH is token1: price = token0/token1
-            // expectedOut = amountIn * 2^192 / sqrtPriceX96^2
-            expectedOut = (amountIn << 192) / (uint256(sqrtPriceX96) * uint256(sqrtPriceX96));
+            // WETH is token1: expectedOut = amountIn * 2^192 / sqrtPrice^2
+            expectedOut = FullMath.mulDiv(amountIn, 1 << 96, sqrtPrice);
+            expectedOut = FullMath.mulDiv(expectedOut, 1 << 96, sqrtPrice);
         }
 
-        // Apply slippage tolerance
         return (expectedOut * (10000 - MAX_SLIPPAGE_BPS)) / 10000;
     }
 
-    /// @dev Convert sqrtPriceX96 to a human-readable price ratio
+    /// @dev Convert sqrtPriceX96 to price ratio (18 decimals)
+    /// Uses FullMath.mulDiv to avoid overflow
     function _sqrtPriceX96ToPrice(uint160 sqrtPriceX96) internal view returns (uint256) {
         address token0 = POOL.token0();
         uint256 sqrtPrice = uint256(sqrtPriceX96);
 
         if (token0 == address(WETH)) {
-            // Price of TUSD in WETH = 1 / (sqrtPriceX96^2 / 2^192)
-            return (1e18 << 192) / (sqrtPrice * sqrtPrice);
+            // Price = sqrtPrice^2 / 2^192, inverted for TUSD/WETH
+            uint256 price = FullMath.mulDiv(sqrtPrice, sqrtPrice, 1 << 96);
+            return FullMath.mulDiv(1e18, 1 << 96, price);
         } else {
-            // Price of TUSD in WETH = sqrtPriceX96^2 / 2^192
-            return (sqrtPrice * sqrtPrice * 1e18) >> 192;
+            // Price = sqrtPrice^2 * 1e18 / 2^192
+            return FullMath.mulDiv(FullMath.mulDiv(sqrtPrice, sqrtPrice, 1 << 96), 1e18, 1 << 96);
         }
     }
 }
