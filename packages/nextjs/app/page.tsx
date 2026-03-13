@@ -1,5 +1,6 @@
 "use client";
 
+import { Address } from "@scaffold-ui/components";
 import type { NextPage } from "next";
 import { formatEther } from "viem";
 import { base } from "viem/chains";
@@ -110,23 +111,6 @@ function tusdPerWeth(sqrtPriceX96: bigint): string {
     return `${priceFloat.toFixed(0)}`;
   }
   return priceFloat.toFixed(2);
-}
-
-function truncateAddr(addr: string): string {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
-
-function BasescanLink({ address, label }: { address: string; label?: string }) {
-  return (
-    <a
-      href={`https://basescan.org/address/${address}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="font-mono text-sm text-primary hover:underline"
-    >
-      {label ?? truncateAddr(address)}
-    </a>
-  );
 }
 
 function StatCard({ title, value, subtitle }: { title: string; value: string; subtitle?: string }) {
@@ -290,11 +274,11 @@ const Home: NextPage = () => {
               ["Uniswap V3 Pool", POOL_ADDRESS],
               ["BurnEngine", BURN_ENGINE_ADDRESS],
               ["TreasuryManager", TREASURY_MANAGER_ADDRESS],
-            ] as [string, string][]
+            ] as [string, `0x${string}`][]
           ).map(([label, addr]) => (
             <div key={addr} className="flex justify-between items-center">
               <span className="text-base-content/60 text-sm">{label}</span>
-              <BasescanLink address={addr} />
+              <Address address={addr} chain={base} />
             </div>
           ))}
         </div>
