@@ -8,7 +8,7 @@ import { useReadContract } from "wagmi";
 
 // ── Contract Addresses ─────────────────────────────────────────────────────
 const BURN_ENGINE_ADDRESS = "0x996A533AF55F6E7230f44D9a36B21E659509122c" as `0x${string}`;
-const TREASURY_MANAGER_ADDRESS = "0x93461176eb7740665DE023602A775aF696f06910" as `0x${string}`;
+const TREASURY_MANAGER_ADDRESS = "0x2e446bCB1A1ACDc9cC451627cB26eE76bfB65d45" as `0x${string}`;
 const TUSD_ADDRESS = "0x3d5e487B21E0569048c4D1A60E98C36e1B09DB07" as `0x${string}`;
 const DEAD_ADDRESS = "0x000000000000000000000000000000000000dEaD" as `0x${string}`;
 const POOL_ADDRESS = "0xd013725b904e76394A3aB0334Da306C505D778F8" as `0x${string}`;

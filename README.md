@@ -12,7 +12,7 @@ Autonomous monetary policy for the memecoin of record. A permissionless burn eng
 - Anyone can call `executeFullCycle()`
 - Uses on-chain sqrtPriceX96 for slippage protection (3% max)
 
-**TreasuryManager** — `0x93461176eb7740665DE023602A775aF696f06910`
+**TreasuryManager** — `0x2e446bCB1A1ACDc9cC451627cB26eE76bfB65d45`
 - Owner + authorized operator pattern with hard-coded caps
 - `buyback()` — Market buy ₸USD with WETH (0.5 ETH/action, 2 ETH/day caps)
 - `burnHoldings()` — Burn all ₸USD held by treasury
@@ -40,7 +40,7 @@ Autonomous monetary policy for the memecoin of record. A permissionless burn eng
 | ₸USD Token | `0x3d5e487B21E0569048c4D1A60E98C36e1B09DB07` |
 | WETH/₸USD Pool (1%) | `0xd013725b904e76394A3aB0334Da306C505D778F8` |
 | BurnEngine | `0x996A533AF55F6E7230f44D9a36B21E659509122c` |
-| TreasuryManager | `0x93461176eb7740665DE023602A775aF696f06910` |
+| TreasuryManager | `0x2e446bCB1A1ACDc9cC451627cB26eE76bfB65d45` |
 | ClankerFeeLocker | `0xF3622742b1E446D92e45E22923Ef11C2fcD55D68` |
 
 ### Hot Wallets (need funding)

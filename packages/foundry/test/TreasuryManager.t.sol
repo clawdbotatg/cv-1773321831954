@@ -210,6 +210,78 @@ contract TreasuryManagerTest is Test {
         assertEq(IERC20(WETH).balanceOf(owner), 0.5 ether);
     }
 
+    // ════════════════════════════ LIQUIDITY ═══════════════════════════
+
+    /// @dev Pool: token0=TUSD, token1=WETH. Current tick ≈ -199140. Fee=10000 → tickSpacing=200.
+    ///      Tick range must be multiples of 200 and straddle current tick.
+    function test_AddLiquidity() public {
+        // Fund treasury with both tokens
+        deal(WETH, address(treasury), 0.01 ether);
+        deal(TUSD, address(treasury), 5_000_000e18);
+
+        // Ticks divisible by 200, straddling current tick -199140
+        int24 tickLower = -200_000;
+        int24 tickUpper = -198_200;
+
+        uint256 wethBefore = IERC20(WETH).balanceOf(address(treasury));
+        uint256 tusdBefore = IERC20(TUSD).balanceOf(address(treasury));
+
+        vm.prank(owner);
+        // amount0Min=0, amount1Min=0: pool ratio determines actual consumed amounts
+        treasury.addLiquidity(tickLower, tickUpper, 5_000_000e18, 0.01 ether, 0, 0);
+
+        // Position should be tracked
+        assertEq(treasury.getLpTokenIds().length, 1);
+
+        // Tokens should have been consumed
+        assertLt(IERC20(WETH).balanceOf(address(treasury)), wethBefore);
+        assertLt(IERC20(TUSD).balanceOf(address(treasury)), tusdBefore);
+
+        console.log("LP token ID:", treasury.getLpTokenIds()[0]);
+        console.log("WETH consumed:", wethBefore - IERC20(WETH).balanceOf(address(treasury)));
+        console.log("TUSD consumed:", tusdBefore - IERC20(TUSD).balanceOf(address(treasury)));
+    }
+
+    function test_AddAndRemoveLiquidity() public {
+        deal(WETH, address(treasury), 0.01 ether);
+        deal(TUSD, address(treasury), 5_000_000e18);
+
+        vm.prank(owner);
+        treasury.addLiquidity(-200_000, -198_200, 5_000_000e18, 0.01 ether, 0, 0);
+
+        uint256 tokenId = treasury.getLpTokenIds()[0];
+        assertEq(treasury.getLpTokenIds().length, 1);
+
+        // Remove it — owner only
+        vm.prank(owner);
+        treasury.removeLiquidity(tokenId);
+
+        // LP tracking cleared
+        assertEq(treasury.getLpTokenIds().length, 0);
+
+        // Tokens returned to treasury
+        assertGt(IERC20(WETH).balanceOf(address(treasury)) + IERC20(TUSD).balanceOf(address(treasury)), 0);
+    }
+
+    function test_RevertWhen_InvalidTickRange() public {
+        deal(WETH, address(treasury), 1 ether);
+        deal(TUSD, address(treasury), 1_000_000e18);
+
+        vm.prank(owner);
+        vm.expectRevert(TreasuryManager.InvalidTickRange.selector);
+        // tickLower >= tickUpper → invalid
+        treasury.addLiquidity(-100, -200, 1_000_000e18, 0.1 ether, 0, 0);
+    }
+
+    function test_RevertWhen_OperatorCannotAddLiquidity_AboveCap() public {
+        deal(WETH, address(treasury), 10 ether);
+        deal(TUSD, address(treasury), 100_000_000e18);
+
+        vm.prank(operator);
+        vm.expectRevert(); // ExceedsActionCap — WETH amount > MAX_PER_ACTION (0.5 ether)
+        treasury.addLiquidity(-200_000, -198_200, 50_000_000e18, 1 ether, 0, 0);
+    }
+
     // ════════════════════════════ VIEW ═══════════════════════════
 
     function test_GetStatus() public view {

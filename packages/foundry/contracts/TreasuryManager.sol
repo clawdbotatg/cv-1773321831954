@@ -185,11 +185,17 @@ contract TreasuryManager is Ownable2Step, ReentrancyGuard {
     }
 
     /// @notice Add concentrated liquidity to the WETH/TUSD pool
+    /// @dev amount0Min/amount1Min are passed explicitly by caller — Uniswap consumes tokens
+    ///      at the pool ratio (not the desired ratio), so computing mins from desired amounts
+    ///      is incorrect and will revert. Caller computes correct mins off-chain.
+    ///      Owner/operator are trusted actors — they control min amounts directly.
     function addLiquidity(
         int24 tickLower,
         int24 tickUpper,
         uint256 amount0Desired,
-        uint256 amount1Desired
+        uint256 amount1Desired,
+        uint256 amount0Min,
+        uint256 amount1Min
     )
         external
         nonReentrant
@@ -214,10 +220,10 @@ contract TreasuryManager is Ownable2Step, ReentrancyGuard {
                     tickUpper: tickUpper,
                     amount0Desired: amount0Desired,
                     amount1Desired: amount1Desired,
-                    amount0Min: (amount0Desired * (10000 - MAX_SLIPPAGE_BPS)) / 10000,
-                    amount1Min: (amount1Desired * (10000 - MAX_SLIPPAGE_BPS)) / 10000,
+                    amount0Min: amount0Min,
+                    amount1Min: amount1Min,
                     recipient: address(this),
-                    deadline: block.timestamp
+                    deadline: block.timestamp + 60
                 })
             );
 
